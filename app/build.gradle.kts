@@ -23,6 +23,9 @@ dependencies {
 
     // This dependency is used by the application.
     implementation(libs.guava)
+    implementation("ch.qos.logback:logback-classic:1.5.18")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.20.0")
+    implementation("com.microsoft.playwright:playwright:1.52.0")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
@@ -34,7 +37,7 @@ java {
 
 application {
     // Define the main class for the application.
-    mainClass = "org.example.App"
+    mainClass = "me.eeshe.watchfacescraper.App"
 }
 
 tasks.named<Test>("test") {
