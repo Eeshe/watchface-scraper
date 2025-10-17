@@ -8,7 +8,13 @@
 plugins {
     // Apply the application plugin to add support for building a CLI application in Java.
     application
+    id("org.springframework.boot") version "3.5.6"
+    id("io.spring.dependency-management") version "1.1.7"
 }
+
+group = "me.eeshe"
+version = "0.1.0"
+description = "Program to scrape free/coupon WearOS watchfaces"
 
 repositories {
     // Use Maven Central for resolving dependencies.
@@ -18,6 +24,7 @@ repositories {
 dependencies {
     // Use JUnit Jupiter for testing.
     testImplementation(libs.junit.jupiter)
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
@@ -27,6 +34,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.20.0")
     implementation("com.microsoft.playwright:playwright:1.52.0")
     implementation("org.xerial:sqlite-jdbc:3.45.1.0")
+	  implementation("org.springframework.boot:spring-boot-starter-web")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

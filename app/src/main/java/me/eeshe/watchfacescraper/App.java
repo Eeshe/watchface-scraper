@@ -3,13 +3,10 @@
  */
 package me.eeshe.watchfacescraper;
 
-import java.util.List;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-import me.eeshe.watchfacescraper.database.SQLiteManager;
-import me.eeshe.watchfacescraper.model.Watchface;
-import me.eeshe.watchfacescraper.model.scrapers.FaceAppsScraper;
-import me.eeshe.watchfacescraper.service.WatchfaceService;
-
+@SpringBootApplication
 public class App {
 
   public String getGreeting() {
@@ -17,11 +14,12 @@ public class App {
   }
 
   public static void main(String[] args) {
-    SQLiteManager sqLiteManager = new SQLiteManager();
-    WatchfaceService watchfaceService = new WatchfaceService(sqLiteManager);
-    watchfaceService.createTables();
-
-    List<Watchface> watchfaces = new FaceAppsScraper().scrape();
-    watchfaceService.writeWatchfaces(watchfaces);
+    SpringApplication.run(App.class, args);
+    // SQLiteManager sqLiteManager = new SQLiteManager();
+    // WatchfaceService watchfaceService = new WatchfaceService(sqLiteManager);
+    // watchfaceService.createTables();
+    //
+    // List<Watchface> watchfaces = new FaceAppsScraper().scrape();
+    // watchfaceService.writeWatchfaces(watchfaces);
   }
 }
