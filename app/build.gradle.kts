@@ -26,6 +26,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.5.18")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.20.0")
     implementation("com.microsoft.playwright:playwright:1.52.0")
+    implementation("org.xerial:sqlite-jdbc:3.45.1.0")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

@@ -3,7 +3,12 @@
  */
 package me.eeshe.watchfacescraper;
 
+import java.util.List;
+
+import me.eeshe.watchfacescraper.database.SQLiteManager;
+import me.eeshe.watchfacescraper.model.Watchface;
 import me.eeshe.watchfacescraper.model.scrapers.FaceAppsScraper;
+import me.eeshe.watchfacescraper.service.WatchfaceService;
 
 public class App {
 
@@ -12,6 +17,11 @@ public class App {
   }
 
   public static void main(String[] args) {
-    new FaceAppsScraper().scrape();
+    SQLiteManager sqLiteManager = new SQLiteManager();
+    WatchfaceService watchfaceService = new WatchfaceService(sqLiteManager);
+    watchfaceService.createTables();
+
+    List<Watchface> watchfaces = new FaceAppsScraper().scrape();
+    watchfaceService.writeWatchfaces(watchfaces);
   }
 }

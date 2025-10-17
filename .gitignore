@@ -3,6 +3,7 @@
 build/
 app/bin/
 app/.classpath
+app/database.db
 !gradle/wrapper/gradle-wrapper.jar
 !gradlew
 !gradlew.bat

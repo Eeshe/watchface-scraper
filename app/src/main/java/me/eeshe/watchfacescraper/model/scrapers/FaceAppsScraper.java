@@ -21,19 +21,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.Locator;
-import com.microsoft.playwright.Locator.WaitForOptions;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
-import com.microsoft.playwright.options.WaitForSelectorState;
 
 import me.eeshe.watchfacescraper.model.Watchface;
 
 public class FaceAppsScraper extends Scraper {
   private static final Logger LOGGER = LoggerFactory.getLogger(FaceAppsScraper.class);
 
-  private static final String FACE_APPS_API_URL = "https://api.facesapps.com/api/watchface";
+  private static final String FACE_APPS_API_URL = "https://api.facesapps.com/api/watchface/";
   private static final int FACE_APPS_API_PAGE = 0;
-  private static final int FACE_APPS_API_LIMIT = 10;
+  private static final int FACE_APPS_API_LIMIT = 100;
 
   private static boolean USE_HEADLESS_BROWSER = true;
 
@@ -41,7 +39,7 @@ public class FaceAppsScraper extends Scraper {
     LOGGER.info("Scraping FaceApps watchfaces...");
 
     List<Watchface> watchfaces = new ArrayList<>();
-    List<String> watchfaceUrls = fetchWatchfaceUrls();
+    List<String> watchfaceUrls = fetchWatchfaceIds();
     if (watchfaceUrls.isEmpty()) {
       return watchfaces;
     }
@@ -56,22 +54,21 @@ public class FaceAppsScraper extends Scraper {
    *
    * @return List of free or coupon watchface URLs.
    */
-  private List<String> fetchWatchfaceUrls() {
-    List<String> watchfaceUrls = new ArrayList<>();
-    JsonNode watchfacesJson = filterPaidWatchfaces(fetchWathfacesJson());
+  private List<String> fetchWatchfaceIds() {
+    List<String> watchfaceIds = new ArrayList<>();
+    JsonNode watchfacesJson = filterPaidWatchfaces(fetchWathfaceListJson());
     if (watchfacesJson == null) {
       LOGGER.error("FaceApps watchface list is empty.");
-      return watchfaceUrls;
+      return watchfaceIds;
     }
-    final String faceAppsUrl = "https://facesapps.com/watchface/";
     for (JsonNode watchfaceJson : watchfacesJson) {
       String watchfaceId = watchfaceJson.get("id").asText();
       if (watchfaceId == null) {
         continue;
       }
-      watchfaceUrls.add(faceAppsUrl + watchfaceId);
+      watchfaceIds.add(watchfaceId);
     }
-    return watchfaceUrls;
+    return watchfaceIds;
   }
 
   /**
@@ -79,42 +76,18 @@ public class FaceAppsScraper extends Scraper {
    *
    * @return JsonNode with the listed watchfaces. Null if the API call failed.
    */
-  private JsonNode fetchWathfacesJson() {
-    LOGGER.info("Fetching FaceApps watchfaces from its API...");
+  private JsonNode fetchWathfaceListJson() {
+    LOGGER.info("Fetching FaceApps watchface list from its API...");
     String requestUrl = String.format(
         "%s?page=%d&limit=%d",
         FACE_APPS_API_URL,
         FACE_APPS_API_PAGE,
         FACE_APPS_API_LIMIT);
-    HttpRequest request = HttpRequest.newBuilder()
-        .GET()
-        .uri(URI.create(requestUrl))
-        .header("Accept", "application/json")
-        .timeout(Duration.ofSeconds(15))
-        .build();
 
-    try {
-      HttpResponse<String> response = HttpClient.newHttpClient().send(
-          request,
-          HttpResponse.BodyHandlers.ofString());
-      int statusCode = response.statusCode();
-      if (statusCode != 200) {
-        LOGGER.error("FaceApps API call failed with status code {}. Response body: {}",
-            statusCode,
-            response.body());
-        return null;
-      }
-      JsonNode jsonNode = new ObjectMapper().readTree(response.body());
+    JsonNode jsonNode = executeGetRequest(requestUrl);
+    LOGGER.info("Fetched {} watchfaces.", jsonNode.size());
 
-      LOGGER.info("Fetched {} watchfaces.", jsonNode.size());
-      return jsonNode;
-    } catch (IOException e) {
-      LOGGER.error("I/O error while calling API: {}. Message: {}", FACE_APPS_API_URL, e.getMessage());
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      LOGGER.error("API call was interruped. Message: {}", e.getMessage());
-    }
-    return null;
+    return jsonNode;
   }
 
   /**
@@ -146,12 +119,12 @@ public class FaceAppsScraper extends Scraper {
     return watchfacesJson;
   }
 
-  private List<Watchface> scrapeWatchfaces(List<String> watchfaceUrls) {
-    LOGGER.info("Starting scraping {} watchfaces...", watchfaceUrls.size());
+  private List<Watchface> scrapeWatchfaces(List<String> watchfaceIds) {
+    LOGGER.info("Starting scraping {} watchfaces...", watchfaceIds.size());
 
     ExecutorService executorService = Executors.newFixedThreadPool(5);
     List<Future<Watchface>> watchfaceFutures = new ArrayList<>();
-    for (String watchfaceUrl : watchfaceUrls) {
+    for (String watchfaceUrl : watchfaceIds) {
       watchfaceFutures.add(executorService.submit(() -> scrapeWatchface(watchfaceUrl)));
     }
     List<Watchface> watchfaces = new ArrayList<>();
@@ -169,51 +142,90 @@ public class FaceAppsScraper extends Scraper {
     return watchfaces;
   }
 
-  private Watchface scrapeWatchface(String watchfaceUrl) {
-    LOGGER.info("Scraping watchface: {}", watchfaceUrl);
-    try (Playwright playwright = Playwright.create()) {
-      Browser browser = launchBrowser(playwright, USE_HEADLESS_BROWSER);
-      Page page = browser.newPage();
-      page.navigate(watchfaceUrl);
+  /**
+   * Fetches and scrapes all required data of the passed Watchface ID.
+   *
+   * @param watchfaceId ID of the watchface to scrape.
+   * @return Scraped Watchface. Null if it has invalid data.
+   */
+  private Watchface scrapeWatchface(String watchfaceId) {
+    LOGGER.info("Scraping watchface: {}", watchfaceId);
 
-      Locator googlePlayButton = page.getByText("Open in Google Play");
-      googlePlayButton.waitFor(new WaitForOptions().setState(WaitForSelectorState.VISIBLE));
-      page.waitForTimeout(2000);
+    JsonNode watchfaceDataJson = fetchWatchfaceData(watchfaceId);
+    String playStoreUrl = watchfaceDataJson.get("link").asText();
+    boolean isFree = watchfaceDataJson.get("distributionType").asText().equals("FREE");
+    int availableCoupons = isFree ? -1 : watchfaceDataJson.get("couponsCount").asInt();
+    if (availableCoupons == 0) {
+      return null;
+    }
+    List<String> imageUrls = scrapeWatchfaceImageUrls(playStoreUrl);
+    return new Watchface(
+        playStoreUrl,
+        "https://facesapps.com/watchface/" + watchfaceId,
+        imageUrls,
+        isFree,
+        availableCoupons);
+  }
 
-      Locator getCouponButton = page.getByText("Get coupon");
-      boolean isFree = !getCouponButton.isVisible();
-      int availableCoupons = -1;
-      if (!isFree) {
-        Locator availableCouponsParagraph = page.locator("p")
-            .filter(new Locator.FilterOptions().setHasText("Available coupons"));
-        Locator couponCountParagraph = availableCouponsParagraph.locator("xpath=preceding-sibling::p[1]");
+  private JsonNode fetchWatchfaceData(String watchfaceId) {
+    return executeGetRequest(FACE_APPS_API_URL + watchfaceId);
+  }
 
-        availableCoupons = Integer.parseInt(couponCountParagraph.innerText().replace(",", ""));
-        if (availableCoupons == 0) {
-          return null;
-        }
+  /**
+   * Executes a GET request to the specified URL.
+   *
+   * @param url URL to make the request to.
+   * @return JSON response of the request.
+   */
+  private JsonNode executeGetRequest(String url) {
+    HttpRequest request = HttpRequest.newBuilder()
+        .GET()
+        .uri(URI.create(url))
+        .header("Accept", "application/json")
+        .timeout(Duration.ofSeconds(15))
+        .build();
+    try {
+      HttpResponse<String> response = HttpClient.newHttpClient().send(
+          request,
+          HttpResponse.BodyHandlers.ofString());
+      int statusCode = response.statusCode();
+      if (statusCode != 200) {
+        LOGGER.error("FaceApps API call failed with status code {}. Response body: {}",
+            statusCode,
+            response.body());
+        return null;
       }
+      return new ObjectMapper().readTree(response.body());
+    } catch (IOException e) {
+      LOGGER.error("I/O error while calling API: {}. Message: {}", url, e.getMessage());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      LOGGER.error("API call was interruped. Message: {}", e.getMessage());
+    }
+    return null;
+  }
 
-      googlePlayButton.click();
+  /**
+   * Scrapes the watchface images from the passed PlayStore URL.
+   *
+   * @param playStoreUrl PlayStore URL to scrape the images from.
+   * @return Scraped images.
+   */
+  private List<String> scrapeWatchfaceImageUrls(String playStoreUrl) {
+    List<String> imageUrls = new ArrayList<>();
+    try (Playwright playwright = Playwright.create();
+        Browser browser = launchBrowser(playwright, USE_HEADLESS_BROWSER);
+        Page page = browser.newPage()) {
+      page.navigate(playStoreUrl);
 
-      // Page went into Google Play
       String cssSelector = "img.T75of.B5GQxf";
       page.waitForSelector(cssSelector);
 
-      List<String> imageUrls = new ArrayList<>();
       for (Locator watchfaceImage : page.locator(cssSelector).all()) {
         String imageUrl = watchfaceImage.getAttribute("src");
         imageUrls.add(imageUrl);
       }
-      page.close();
-      browser.close();
-
-      return new Watchface(
-          page.url(),
-          watchfaceUrl,
-          imageUrls,
-          isFree,
-          availableCoupons);
     }
+    return imageUrls;
   }
 }
